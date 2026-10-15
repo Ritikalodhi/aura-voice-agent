@@ -42,8 +42,10 @@ export async function POST(req) {
       if (!msg.tool_calls?.length) {
                 const clean = (msg.content || "")
           .replace(/[\u202F\u00A0]/g, " ")
+                  .replace(/[\u2010\u2011]/g, "-")
           .replace(/[\u2018\u2019]/g, "'")
           .replace(/[\u201C\u201D]/g, '"')
+                  .replace(/\s*\n+\s*/g, " ")
           .trim();
         return Response.json({ reply: clean, toolLog });
       }
