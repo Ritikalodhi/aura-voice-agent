@@ -2,7 +2,9 @@
 
 A browser-based voice customer support agent for a fictional D2C skincare brand. Click **Start Call**, talk to Aria, get answers on policies and live order status, and see a transcript with a structured JSON summary when the call ends.
 
-**Live demo:** <live-url> (use Google Chrome and allow the microphone)
+**Live demo:** https://aura-voice-agent-4mi5.onrender.com (use Google Chrome and allow the microphone)
+
+> First load may take up to a minute because free hosting wakes from sleep.
 
 ## Features
 
@@ -48,7 +50,7 @@ The system prompt requires a lookup for any order-specific question. The model i
 ## Setup
 
 ```bash
-git clone https://github.com/<your-username>/aura-voice-agent.git
+git clone https://github.com/Ritikalodhi/aura-voice-agent.git
 cd aura-voice-agent
 npm install
 cp .env.example .env.local   # on Windows: copy .env.example .env.local
