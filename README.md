@@ -21,14 +21,45 @@ A browser-based voice customer support agent for a fictional D2C skincare brand.
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    C["Customer (Chrome)"] -->|speaks| STT["Web Speech API<br/>speech to text"]
+    STT -->|text| UI["Next.js page<br/>call loop + transcript"]
+    UI -->|conversation| CHAT["/api/chat"]
+    CHAT -->|prompt + tool schema| LLM["Groq LLM<br/>gpt-oss-120b"]
+    LLM -->|tool call| TOOL["get_order_details<br/>mock order DB"]
+    TOOL -->|order data or error| LLM
+    LLM -->|reply text| CHAT
+    CHAT -->|reply| UI
+    UI -->|short chunks| TTS["/api/tts"]
+    TTS --> SAR["Sarvam Bulbul v3<br/>Indian English voice"]
+    SAR -->|audio| UI
+    UI -->|plays audio| C
+    UI -->|End Call: transcript| SUM["/api/summary"]
+    SUM -->|JSON outcome| UI
 ```
-Mic -> Web Speech API (STT, en-IN)
-    -> POST /api/chat  -> Groq LLM (gpt-oss-120b) with tool calling
-                              |-> get_order_details(order_id) -> mock order DB
-    -> reply text split into short chunks
-    -> POST /api/tts (Sarvam Bulbul v3, Indian English voice) -> audio playback
-       (falls back to browser speech synthesis if TTS fails)
-End Call -> POST /api/summary -> JSON outcome + transcript shown on page
+
+**One turn of the call**
+
+1. The customer speaks; the browser transcribes it (Web Speech API, en-IN) and shows live captions
+2. `/api/chat` sends the history plus the system prompt (persona, policies, known products, rules) to the LLM
+3. If the question is about an order, the LLM calls `get_order_details`; the server runs it and returns the order or a structured error
+4. The LLM writes a short spoken reply; the server cleans the text
+5. The reply is split into short chunks, each synthesised by `/api/tts` in parallel, and played in order so the first chunk starts early
+6. If TTS fails, the browser's built-in voice speaks instead
+7. On End Call, `/api/summary` turns the transcript into a JSON outcome shown on the page
+
+**Project structure**
+
+```
+app/
+    page.js              call UI, listen/think/speak loop, transcript, summary
+    api/chat/route.js    LLM + tool-calling loop
+    api/tts/route.js     Sarvam text-to-speech proxy
+    api/summary/route.js post-call JSON outcome
+lib/
+    prompt.js            persona, policies, product list, guardrails
+    orders.js            mock order database + get_order_details
 ```
 
 - **Frontend:** Next.js (App Router), one page that runs the listen, think, speak loop and holds the transcript
@@ -85,16 +116,20 @@ Other things to try: "Book me a flight to Goa", "Track ORD-999", "I opened a pro
 - Speech recognition uses the browser Web Speech API, which works in Chrome only
 - No barge-in yet: Aria finishes her sentence before listening again
 - Order data is a mock in-memory object
+- Speech recognition is set to Indian English, so Hindi or Hinglish speech may be transcribed less accurately (Aria can still reply in Hinglish)
+- Hosted on a free tier, so the first request after idle can take up to a minute
 
 ## Tell us how you think
 
 ### 1. Why did you choose your architecture and stack?
 
-I used a modular STT, LLM, TTS pipeline instead of a realtime speech-to-speech API. It makes each step visible and debuggable: I can read exactly what the customer said, see which tool the model called, and control what is spoken. That matters for guardrails and the transcript. Next.js lets one repo hold the UI and the API routes and deploys to Vercel in minutes. Groq gives fast LLM inference with function calling and a free tier. Sarvam Bulbul gives a natural Indian-accent voice that handles Hinglish. The browser Web Speech API keeps speech recognition free and low-friction for a prototype, and every provider sits behind a small API route so it can be swapped.
+I used a modular STT, LLM, TTS pipeline instead of a realtime speech-to-speech API. It makes each step visible and debuggable: I can read exactly what the customer said, see which tool the model called, and control what is spoken. That matters for guardrails and the transcript. Next.js lets one repo hold the UI and the API routes, and it deploys as a single service (hosted on Render). Groq gives fast LLM inference with function calling and a free tier. Sarvam Bulbul gives a natural Indian-accent voice that handles Hinglish. The browser Web Speech API keeps speech recognition free and low-friction for a prototype, and every provider sits behind a small API route so it can be swapped.
 
 ### 2. What was the most difficult part, and how did you solve it?
 
 Making the agent trustworthy. In testing, when I asked for "all your products", Aria invented a product catalogue and prices that did not exist in the brief. The fix was to ground the prompt with the only products we know, forbid inventing anything outside the prompt or tool results, and add test questions for these cases. A second challenge was making the call feel smooth: browser speech was robotic and slow. I moved to server-side Indian TTS, split replies into short chunks that are synthesised in parallel so the first chunk starts early, and added a browser-voice fallback so a TTS failure never breaks the call. I also hit a retired LLM model during development, so the model name is now an environment variable.
+
+Another issue I found while testing the live app: customers say "order 101", not "ORD-101", and the agent kept asking for the exact format. I fixed it by normalising spoken numbers in the lookup function (so "101" and "one zero one" both map to ORD-101), telling the model never to ask for a specific ID format, and asking a clarifying question when a bare number could mean anything.
 
 ### 3. If you had one more week, what would you improve first?
 
