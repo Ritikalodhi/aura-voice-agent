@@ -12,7 +12,7 @@ const tools = [
     type: "function",
     function: {
       name: "get_order_details",
-      description: "Look up an Aura Skincare order by its ID (format ORD-101).",
+      description: "Look up an Aura Skincare order. Pass the ID as ORD- followed by the digits the customer said (e.g. customer says 'order 101' -> 'ORD-101').",
       parameters: {
         type: "object",
         properties: { order_id: { type: "string", description: "e.g. ORD-101" } },
@@ -45,7 +45,8 @@ export async function POST(req) {
                   .replace(/[\u2010\u2011]/g, "-")
           .replace(/[\u2018\u2019]/g, "'")
           .replace(/[\u201C\u201D]/g, '"')
-                  .replace(/\s*\n+\s*/g, " ")
+                    .replace(/\s*\n+\s*/g, " ")
+                  .replace(/([.!?])(?=[A-Z])/g, "$1 ")
           .trim();
         return Response.json({ reply: clean, toolLog });
       }
